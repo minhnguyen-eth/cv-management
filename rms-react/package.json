@@ -6,7 +6,7 @@
     "@testing-library/jest-dom": "^5.11.4",
     "@testing-library/react": "^11.1.0",
     "@testing-library/user-event": "^12.1.10",
-    "axios": "^0.24.0",
+    "axios": "^1.12.2",
     "font-awesome": "^4.7.0",
     "react": "^17.0.2",
     "react-dom": "^17.0.2",
@@ -14,13 +14,12 @@
     "react-scripts": "4.0.3",
     "web-vitals": "^1.0.1"
   },
-"scripts": {
-  "start": "cross-env BROWSER=none NODE_OPTIONS=--openssl-legacy-provider react-scripts start",
-  "build": "cross-env NODE_OPTIONS=--openssl-legacy-provider react-scripts build",
-  "test": "cross-env NODE_OPTIONS=--openssl-legacy-provider react-scripts test",
-  "eject": "react-scripts eject"
-},
-
+  "scripts": {
+    "start": "cross-env BROWSER=none NODE_OPTIONS=--openssl-legacy-provider react-scripts start",
+    "build": "cross-env NODE_OPTIONS=--openssl-legacy-provider react-scripts build",
+    "test": "cross-env NODE_OPTIONS=--openssl-legacy-provider react-scripts test",
+    "eject": "react-scripts eject"
+  },
   "eslintConfig": {
     "extends": [
       "react-app",
