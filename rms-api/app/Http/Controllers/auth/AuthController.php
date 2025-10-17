@@ -15,7 +15,9 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use JWTAuth;
 use Symfony\Component\HttpFoundation\Response;
-
+use Carbon\Carbon;
+use App\Mail\PasswordResetMail;  
+use Illuminate\Support\Facades\Mail;
 class AuthController extends Controller
 {
     use ApiResponseWithHttpSTatus;
@@ -208,46 +210,107 @@ public function register(Request $request) {
     }
 
     public function forgotPassword(Request $request)
-    {
-        $user = User::where('email',$request->email)->first();
-        if ($user) {
-            $token = Str::random(15);
-            $details = ['name'=>$user->name,'token'=>$token,'email'=>$user->email,'hashEmail'=>Crypt::encryptString($user->email)];
-            if (dispatch(new PasswordResetJob($details))) {
-                DB::table('password_resets')->insert([
-                    'email'=>$user->email,
-                    'token'=>$token,
-                    'created_at'=>now()
-                ]);
-                return $this->apiResponse('Password reset link has been sent to your email address',null,Response::HTTP_OK,true);
-            }
-        } else {
-            return $this->apiResponse('invalid email',null,Response::HTTP_OK,true);
-        }
-    }
+{
+    $request->validate(['email' => 'required|email|exists:users,email']);
 
-    public function updatePassword(Request $request)
+    $email = $request->email;
+    $token = Str::random(64);
+
+    DB::table('password_resets')->updateOrInsert(
+        ['email' => $email],
+        ['token' => $token, 'created_at' => Carbon::now()]
+    );
+
+    $user = User::where('email', $email)->first();
+    $hashEmail = Crypt::encryptString($email);
+$link = "http://localhost:3000/change-password?email={$hashEmail}&token={$token}";
+
+    $payload = [
+        'name'      => $user->name ?? 'bạn',
+        'token'     => $token,
+        'hashEmail' => $hashEmail,
+        'link'      => $link,
+    ];
+
+    Mail::to($email)->queue(new PasswordResetMail($payload));
+
+    return response()->json(['status'=>true,'message'=>'Đã gửi email đặt lại mật khẩu']);
+}
+
+    public function resetPassword(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'email' => 'required',
-            'password' => 'required|string|min:6',
-            'token'=>'required'
+        $v = Validator::make($request->all(), [
+            'email'                 => 'required|string', // email đã mã hoá
+            'token'                 => 'required|string',
+            'password'              => 'required|string|confirmed|min:6',
         ]);
 
-        if ($validator->fails()) {
-            return response()->json($validator->errors(), 422);
+        if ($v->fails()) {
+            return response()->json([
+                'message' => 'Dữ liệu không hợp lệ',
+                'errors'  => $v->errors(),
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
-        $email = Crypt::decryptString($request->email);
-        $user = DB::table('password_resets')->where([['email',$email],['token',$request->token]])->first();
-        if(!$user){
-            return $this->apiResponse('Invalid email address or token',null,Response::HTTP_OK,true);
-        }else{
-            $data = User::where('email',$email)->first();
-            $data->update([
-                'password'=> Hash::make($request->password)
-            ]);
-            DB::table('password_resets')->where('email',$email)->delete();
-            return $this->apiResponse('Password updated !',null,Response::HTTP_OK,true);
+
+        try {
+            $decryptedEmail = Crypt::decryptString($request->email);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Email không hợp lệ'], Response::HTTP_BAD_REQUEST);
         }
+
+        $record = DB::table('password_resets')
+            ->where('email', $decryptedEmail)
+            ->where('token', $request->token)
+            ->first();
+
+        if (!$record) {
+            return response()->json(['message' => 'Token hoặc email không hợp lệ'], Response::HTTP_BAD_REQUEST);
+        }
+
+        // (Khuyến nghị) hết hạn sau 60 phút
+        if (Carbon::parse($record->created_at)->addMinutes(60)->isPast()) {
+            return response()->json(['message' => 'Token đã hết hạn'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $user = User::where('email', $decryptedEmail)->first();
+        if (!$user) {
+            return response()->json(['message' => 'Không tìm thấy người dùng'], Response::HTTP_NOT_FOUND);
+        }
+
+        $user->update(['password' => Hash::make($request->password)]);
+        DB::table('password_resets')->where('email', $decryptedEmail)->delete();
+
+        return response()->json(['message' => 'Đổi mật khẩu thành công'], Response::HTTP_OK);
     }
+    public function changePassword(Request $request)
+{
+    $request->validate([
+        'old_password'          => 'required|string',
+        'password'              => 'required|string|confirmed|min:6',
+    ]);
+
+    // Lấy user từ JWT
+    $user = auth('api')->user(); // hoặc JWTAuth::parseToken()->authenticate();
+    if (!$user) {
+        return response()->json(['status'=>false, 'message'=>'unauthenticated'], 401);
+    }
+
+    // Kiểm tra mật khẩu cũ
+    if (!Hash::check($request->old_password, $user->password)) {
+        return response()->json(['status'=>false, 'message'=>'old_password_incorrect'], 422);
+    }
+
+    // (Tuỳ chọn) Không cho đặt trùng như cũ
+    if (Hash::check($request->password, $user->password)) {
+        return response()->json(['status'=>false, 'message'=>'new_password_same_as_old'], 422);
+    }
+
+    // Cập nhật
+    $user->password = Hash::make($request->password);
+    $user->save();
+
+    // (Gợi ý) Yêu cầu user đăng nhập lại để lấy JWT mới
+    return response()->json(['status'=>true, 'message'=>'Đổi mật khẩu thành công. Vui lòng đăng nhập lại.'], 200);
+}
+
 }
