@@ -1,11 +1,16 @@
-// src/config.js
 import axios from "axios";
 
-const token = localStorage.getItem("token");
+axios.defaults.baseURL = "http://127.0.0.1:8000"; // thêm /api vào luôn
 
-axios.defaults.baseURL = "http://127.0.0.1:8000"; // <-- thêm /api
-axios.defaults.headers.common = { Authorization: `Bearer ${token}` };
-axios.defaults.headers.post["content-type"] = "application/x-www-form-urlencoded";
+axios.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("token"); // luôn đọc mới nhất
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
-// Nếu backend chạy ở host/port khác, đổi dòng trên cho đúng
 export default axios;

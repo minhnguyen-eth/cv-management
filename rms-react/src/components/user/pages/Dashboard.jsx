@@ -1,4 +1,4 @@
-// src/components/user/pages/Dashboard.jsx (Admin view with desktop+mobile toggleable sidebar + Jobs CRUD)
+// src/components/user/pages/Dashboard.jsx (Admin view with desktop+mobile toggleable sidebar + Jobs CRUD + Avatar menu)
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../../../config";
 import { useNavigate } from "react-router-dom";
@@ -43,6 +43,16 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState("departments"); // mặc định mở Phòng ban
   const [sidebarOpen, setSidebarOpen] = useState(true); // desktop mặc định mở, mobile sẽ ẩn bằng CSS
 
+  // Avatar dropdown state
+  const [menuOpen, setMenuOpen] = useState(false);
+  const toggleMenu = () => setMenuOpen((v) => !v);
+
+  // Lấy info user đã lưu khi login
+  let user = null;
+  try { user = JSON.parse(localStorage.getItem("user") || "null"); } catch {}
+  const displayName = user?.full_name || user?.name || "User";
+  const avatarUrl  = user?.avatar || "";
+
   // Khởi tạo theo kích thước màn hình: mobile -> đóng, desktop -> mở
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -51,8 +61,19 @@ const Dashboard = () => {
     }
   }, []);
 
+  // Đóng menu avatar khi click ra ngoài
+  useEffect(() => {
+    const onClick = (e) => {
+      if (!e.target.closest(".user-menu")) setMenuOpen(false);
+    };
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, []);
+
   const logout = () => {
     localStorage.removeItem("token");
+    // (tuỳ chọn) xoá luôn user local
+    // localStorage.removeItem("user");
     navigate("/login", { replace: true });
   };
 
@@ -111,9 +132,43 @@ const Dashboard = () => {
           </button>
           <span className="brand-text">Recruitment Manager — Admin</span>
         </div>
+
         <div className="actions">
-          <button className="btn" onClick={() => navigate("/profile")}>Profile</button>
-          <button className="btn danger" onClick={logout}>Đăng xuất</button>
+          {/* Avatar + Dropdown */}
+          <div className="user-menu">
+            <button className="avatar-btn" onClick={toggleMenu} aria-label="User menu">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="avatar" />
+              ) : (
+                <span className="avatar-fallback">
+                  {(displayName || "U").slice(0,1).toUpperCase()}
+                </span>
+              )}
+            </button>
+
+            {menuOpen && (
+              <div className="menu">
+                <button
+                  className="menu-item"
+                  onClick={() => { setMenuOpen(false); navigate("/profile"); }}
+                >
+                  Profile
+                </button>
+                <button
+                  className="menu-item"
+                  onClick={() => { setMenuOpen(false); navigate("/account/change-password"); }}
+                >
+                  Đổi mật khẩu
+                </button>
+                <button
+                  className="menu-item danger"
+                  onClick={() => { setMenuOpen(false); logout(); }}
+                >
+                  Đăng xuất
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -208,10 +263,27 @@ const Dashboard = () => {
         .hamburger{display:inline-flex;flex-direction:column;gap:3px;background:none;border:none;padding:6px;cursor:pointer}
         .hamburger .bar{width:20px;height:2px;background:#111827;border-radius:2px;display:block}
 
-        .actions .btn{margin-left:8px;padding:8px 14px;border:1px solid #047857;background:#fff;color:#047857;border-radius:8px;cursor:pointer;font-weight:500}
-        .actions .btn:hover{background:#047857;color:#fff}
-        .actions .btn.danger{border-color:#dc2626;color:#dc2626}
-        .actions .btn.danger:hover{background:#dc2626;color:#fff}
+        .actions{display:flex;align-items:center;gap:12px}
+
+        /* Avatar dropdown */
+        .user-menu{position:relative}
+        .avatar-btn{
+          width:36px;height:36px;border-radius:50%;
+          border:1px solid #e5e7eb;background:#fff;cursor:pointer;
+          display:inline-flex;align-items:center;justify-content:center;
+          padding:0;overflow:hidden;
+        }
+        .avatar-btn img{width:100%;height:100%;object-fit:cover}
+        .avatar-fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f3f4f6;color:#111827;font-weight:600}
+        .user-menu .menu{
+          position:absolute;right:0;top:44px;min-width:180px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;
+          box-shadow:0 10px 30px rgba(0,0,0,0.08);padding:6px;display:flex;flex-direction:column;z-index:60
+        }
+        .user-menu .menu .menu-item{
+          padding:10px 12px;text-align:left;border:0;background:transparent;cursor:pointer;border-radius:8px;font-size:14px;color:#111827
+        }
+        .user-menu .menu .menu-item:hover{background:#f3f4f6}
+        .user-menu .menu .menu-item.danger{color:#b91c1c}
 
         .admin-body{display:flex;gap:0}
 
@@ -299,6 +371,7 @@ function DepartmentsModule() {
   const [items, setItems] = useState([]);
 
   const [query, setQuery] = useState("");
+  
   const [page, setPage] = useState(1);
   const pageSize = 8;
 
